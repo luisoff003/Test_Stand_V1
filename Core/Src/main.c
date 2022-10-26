@@ -102,20 +102,20 @@ int main(void)
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
 
+  /* Sets pins for the Load Cell */
   hx711_init(&loadcell, GPIOB, GPIO_PIN_0, GPIOB, GPIO_PIN_1);
-//  value1 = hx711_value_ave(&loadcell, 10);	//No load 8326279 for 400kg stand
-//  value2 = hx711_value_ave(&loadcell, 10);	//Load 10 kg 8291415 for 400kg stand
-//  hx711_calibration(&loadcell, value1, value2, 800.0);
 
+/* Load cell without load resulted to 8326279 for calibration */
+ value1 = hx711_value_ave(&loadcell, 10);
+ 
+ /* Load cell with 10kg resulted to 8291415 for calibration */
+ value2 = hx711_value_ave(&loadcell, 10);	
 
-  value1 = hx711_value_ave(&loadcell, 10);	//No load 8251400
-  value2 = hx711_value_ave(&loadcell, 10);	//Load 1.07 kg  8364345 for 20kg stand
-  hx711_calibration(&loadcell, value1, value2, 1.07);
-
+ /* Calibration with 10kg on the load cell */
+ hx711_calibration(&loadcell, value1, value2, 10.0);  
 
   hx711_tare(&loadcell, 10);
-//  hx711_coef_set(&loadcell, -63.5724983);	//This is for the perejil Test Stand 400kg
-  hx711_coef_set(&loadcell, 105556.07);	//This is for the lil Test Stand 20kg
+ hx711_coef_set(&loadcell, -63.5724983);	//This is for the perejil Test Stand 400kg
 
   /* USER CODE END 2 */
 
@@ -124,22 +124,24 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-	  //HAL_Delay(1);
 
+		  tickstart = HAL_GetTick();    //Not used 
 
-		  tickstart = HAL_GetTick();
+      /*Read weight from sensor*/
 		  weight[0] = hx711_weight(&loadcell, 1);
-		  //Perejil 400kg test stand
-//		  if (weight[0]<-10000.0){
-//			  weight[0] = weight[0] + 13140.0;	//This is for the perejil Test Stand 400kg
-//		  }
+		  //Fix data for the 800kg test stand
+      /* TODO:  See why we get NEGATIVE VALUES! */
+		  if (weight[0]<-10000.0){
+			  weight[0] = weight[0] + 13140.0;	//This is for the perejil Test Stand 800kg
+		  }
+
+      /* Get the actual time */
 		  tickend = HAL_GetTick();
-//		  size = sprintf((char *)buffer,"/*%0.2f,%0.4f*/ \n\r", (float)tickend/1000.0,  weight[0]/100.0); //This is for the perejil test stand 400kg
 
-		  size = sprintf((char *)buffer,"/*%0.2f,%0.4f*/ \n\r", (float)tickend/1000.0,  weight[0]);
+      /* Print the actual weight along the time */
+		  size = sprintf((char *)buffer,"/*%0.2f,%0.4f*/ \n\r", (float)tickend/1000.0,  weight[0]/100.0); //This is for the perejil test stand 400kg
+
 		  CDC_Transmit_FS(buffer,size);
-
-
 
     /* USER CODE BEGIN 3 */
   }
