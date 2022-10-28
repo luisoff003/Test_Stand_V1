@@ -23,6 +23,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "fatfs_sd.h"
+#include "string.h"
+#include "stdio.h"
 #include "hx711.h"
 /* USER CODE END Includes */
 
@@ -47,7 +50,7 @@ SPI_HandleTypeDef hspi1;
 
 /* USER CODE BEGIN PV */
 
- uint8_t buffer[100] = "Hello World";
+//  uint8_t buffer[100] = "Hello World";
  uint8_t size = 0;
 
 /* USER CODE END PV */
@@ -71,6 +74,33 @@ int32_t value1 = 0,value2 = 0;
 uint32_t tickstart=0, tickend=0, tickend2 = 0;
 uint8_t stop = 0;
 float bias = 131.0;
+FATFS fs;  // file system
+FIL fil; // File
+FILINFO fno;
+FRESULT fresult;  // result
+UINT br, bw;  // File read/write count
+
+/**** capacity related *****/
+FATFS *pfs;
+DWORD fre_clust;
+uint32_t total, free_space;
+
+#define BUFFER_SIZE 128
+char buffer[BUFFER_SIZE];  // to store strings..
+
+int i=0;
+
+int bufsize (char *buf)
+{
+	int i=0;
+	while (*buf++ != '\0') i++;
+	return i;
+}
+
+void clear_buffer (void)
+{
+	for (int i=0; i<BUFFER_SIZE; i++) buffer[i] = '\0';
+}
 
 /* USER CODE END 0 */
 
@@ -107,6 +137,49 @@ int main(void)
   MX_SPI1_Init();
   MX_FATFS_Init();
   /* USER CODE BEGIN 2 */
+
+  HAL_Delay (500);
+
+  fresult = f_mount(&fs, "/", 1);
+  if (fresult != FR_OK) {
+	  while(1);
+	}
+  else{
+    /*All ok*/
+	}
+
+  /*************** Card capacity details ********************/
+
+  	/* Check free space */
+//  	f_getfree("", &fre_clust, &pfs);
+//
+//  	total = (uint32_t)((pfs->n_fatent - 2) * pfs->csize * 0.5);
+//  	// sprintf (buffer, "SD CARD Total Size: \t%lu\n",total);
+//  	// send_uart(buffer);
+//  	clear_buffer();
+//  	free_space = (uint32_t)(fre_clust * pfs->csize * 0.5);
+//  	// sprintf (buffer, "SD CARD Free Space: \t%lu\n\n",free_space);
+//  	// send_uart(buffer);
+//  	clear_buffer();
+
+  	/************* The following operation is using PUTS and GETS *********************/
+
+  	/* Open file to write/ create a file if it doesn't exist */
+      fresult = f_open(&fil, "FILE003.TXT", FA_OPEN_EXISTING | FA_CREATE_ALWAYS | FA_WRITE |FA_READ);
+      clear_buffer();
+
+  	/* Writing text */
+      fresult = f_puts("This data is from the FILE1.txt.", &fil);
+
+  	/* Close file */
+  	fresult = f_close(&fil);
+
+  	if (fresult != FR_OK){
+      while(1);
+    }
+  	else {
+  		/*All OK*/
+  	}
 
   /* Sets pins for the Load Cell */
   hx711_init(&loadcell, GPIOB, GPIO_PIN_0, GPIOB, GPIO_PIN_1);
@@ -175,10 +248,10 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-  RCC_OscInitStruct.PLL.PLLM = 25;
-  RCC_OscInitStruct.PLL.PLLN = 192;
-  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
-  RCC_OscInitStruct.PLL.PLLQ = 4;
+  RCC_OscInitStruct.PLL.PLLM = 15;
+  RCC_OscInitStruct.PLL.PLLN = 144;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV6;
+  RCC_OscInitStruct.PLL.PLLQ = 5;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -193,7 +266,7 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_3) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
   {
     Error_Handler();
   }
@@ -256,7 +329,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_256;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
