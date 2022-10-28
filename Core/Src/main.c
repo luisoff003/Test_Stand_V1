@@ -18,10 +18,14 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "fatfs.h"
 #include "usb_device.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "fatfs_sd.h"
+#include "string.h"
+#include "stdio.h"
 #include "hx711.h"
 /* USER CODE END Includes */
 
@@ -42,9 +46,11 @@
 /* Private variables ---------------------------------------------------------*/
  I2C_HandleTypeDef hi2c1;
 
+SPI_HandleTypeDef hspi1;
+
 /* USER CODE BEGIN PV */
 
- uint8_t buffer[100] = "Hello World";
+//  uint8_t buffer[100] = "Hello World";
  uint8_t size = 0;
 
 /* USER CODE END PV */
@@ -53,11 +59,12 @@
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_I2C1_Init(void);
+static void MX_SPI1_Init(void);
 /* USER CODE BEGIN PFP */
 
-/* USER CODE END PFP */
-
 extern uint8_t CDC_Transmit_FS(uint8_t* Buf, uint16_t Len);
+
+/* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
@@ -67,6 +74,33 @@ int32_t value1 = 0,value2 = 0;
 uint32_t tickstart=0, tickend=0, tickend2 = 0;
 uint8_t stop = 0;
 float bias = 131.0;
+FATFS fs;  // file system
+FIL fil; // File
+FILINFO fno;
+FRESULT fresult;  // result
+UINT br, bw;  // File read/write count
+
+/**** capacity related *****/
+FATFS *pfs;
+DWORD fre_clust;
+uint32_t total, free_space;
+
+#define BUFFER_SIZE 128
+char buffer[BUFFER_SIZE];  // to store strings..
+
+int i=0;
+
+int bufsize (char *buf)
+{
+	int i=0;
+	while (*buf++ != '\0') i++;
+	return i;
+}
+
+void clear_buffer (void)
+{
+	for (int i=0; i<BUFFER_SIZE; i++) buffer[i] = '\0';
+}
 
 /* USER CODE END 0 */
 
@@ -100,22 +134,67 @@ int main(void)
   MX_GPIO_Init();
   MX_USB_DEVICE_Init();
   MX_I2C1_Init();
+  MX_SPI1_Init();
+  MX_FATFS_Init();
   /* USER CODE BEGIN 2 */
 
+  HAL_Delay (500);
+
+  fresult = f_mount(&fs, "/", 1);
+  if (fresult != FR_OK) {
+	  while(1);
+	}
+  else{
+    /*All ok*/
+	}
+
+  /*************** Card capacity details ********************/
+
+  	/* Check free space */
+//  	f_getfree("", &fre_clust, &pfs);
+//
+//  	total = (uint32_t)((pfs->n_fatent - 2) * pfs->csize * 0.5);
+//  	// sprintf (buffer, "SD CARD Total Size: \t%lu\n",total);
+//  	// send_uart(buffer);
+//  	clear_buffer();
+//  	free_space = (uint32_t)(fre_clust * pfs->csize * 0.5);
+//  	// sprintf (buffer, "SD CARD Free Space: \t%lu\n\n",free_space);
+//  	// send_uart(buffer);
+//  	clear_buffer();
+
+  	/************* The following operation is using PUTS and GETS *********************/
+
+  	/* Open file to write/ create a file if it doesn't exist */
+      fresult = f_open(&fil, "FILE003.TXT", FA_OPEN_EXISTING | FA_CREATE_ALWAYS | FA_WRITE |FA_READ);
+      clear_buffer();
+
+  	/* Writing text */
+      fresult = f_puts("This data is from the FILE1.txt.", &fil);
+
+  	/* Close file */
+  	fresult = f_close(&fil);
+
+  	if (fresult != FR_OK){
+      while(1);
+    }
+  	else {
+  		/*All OK*/
+  	}
+
+  /* Sets pins for the Load Cell */
   hx711_init(&loadcell, GPIOB, GPIO_PIN_0, GPIOB, GPIO_PIN_1);
-//  value1 = hx711_value_ave(&loadcell, 10);	//No load 8326279 for 400kg stand
-//  value2 = hx711_value_ave(&loadcell, 10);	//Load 10 kg 8291415 for 400kg stand
-//  hx711_calibration(&loadcell, value1, value2, 800.0);
 
+/* Load cell without load resulted to 8326279 for calibration */
+ value1 = hx711_value_ave(&loadcell, 10);
+ 
+ /* Load cell with 10kg resulted to 8291415 for calibration */
+ value2 = hx711_value_ave(&loadcell, 10);	
 
-  value1 = hx711_value_ave(&loadcell, 10);	//No load 8251400
-  value2 = hx711_value_ave(&loadcell, 10);	//Load 1.07 kg  8364345 for 20kg stand
-  hx711_calibration(&loadcell, value1, value2, 1.07);
-
+ /* Calibration with 10kg on the load cell */
+ hx711_calibration(&loadcell, value1, value2, 10.0);  
 
   hx711_tare(&loadcell, 10);
-//  hx711_coef_set(&loadcell, -63.5724983);	//This is for the perejil Test Stand 400kg
-  hx711_coef_set(&loadcell, 105556.07);	//This is for the lil Test Stand 20kg
+ hx711_coef_set(&loadcell, -63.5724983);	//This is for the perejil Test Stand 400kg
 
   /* USER CODE END 2 */
 
@@ -124,24 +203,26 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-	  //HAL_Delay(1);
-
-
-		  tickstart = HAL_GetTick();
-		  weight[0] = hx711_weight(&loadcell, 1);
-		  //Perejil 400kg test stand
-//		  if (weight[0]<-10000.0){
-//			  weight[0] = weight[0] + 13140.0;	//This is for the perejil Test Stand 400kg
-//		  }
-		  tickend = HAL_GetTick();
-//		  size = sprintf((char *)buffer,"/*%0.2f,%0.4f*/ \n\r", (float)tickend/1000.0,  weight[0]/100.0); //This is for the perejil test stand 400kg
-
-		  size = sprintf((char *)buffer,"/*%0.2f,%0.4f*/ \n\r", (float)tickend/1000.0,  weight[0]);
-		  CDC_Transmit_FS(buffer,size);
-
-
 
     /* USER CODE BEGIN 3 */
+    		  tickstart = HAL_GetTick();    //Not used 
+
+      /*Read weight from sensor*/
+		  weight[0] = hx711_weight(&loadcell, 1);
+		  //Fix data for the 800kg test stand
+      /* TODO:  See why we get NEGATIVE VALUES! */
+		  if (weight[0]<-10000.0){
+			  weight[0] = weight[0] + 13140.0;	//This is for the perejil Test Stand 800kg
+		  }
+
+      /* Get the actual time */
+		  tickend = HAL_GetTick();
+
+      /* Print the actual weight along the time */
+		  size = sprintf((char *)buffer,"/*%0.2f,%0.4f*/ \n\r", (float)tickend/1000.0,  weight[0]/100.0); //This is for the perejil test stand 400kg
+
+		  CDC_Transmit_FS(buffer,size);
+
   }
   /* USER CODE END 3 */
 }
@@ -167,10 +248,10 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-  RCC_OscInitStruct.PLL.PLLM = 25;
-  RCC_OscInitStruct.PLL.PLLN = 192;
-  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
-  RCC_OscInitStruct.PLL.PLLQ = 4;
+  RCC_OscInitStruct.PLL.PLLM = 15;
+  RCC_OscInitStruct.PLL.PLLN = 144;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV6;
+  RCC_OscInitStruct.PLL.PLLQ = 5;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -185,7 +266,7 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_3) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
   {
     Error_Handler();
   }
@@ -226,6 +307,44 @@ static void MX_I2C1_Init(void)
 }
 
 /**
+  * @brief SPI1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_SPI1_Init(void)
+{
+
+  /* USER CODE BEGIN SPI1_Init 0 */
+
+  /* USER CODE END SPI1_Init 0 */
+
+  /* USER CODE BEGIN SPI1_Init 1 */
+
+  /* USER CODE END SPI1_Init 1 */
+  /* SPI1 parameter configuration*/
+  hspi1.Instance = SPI1;
+  hspi1.Init.Mode = SPI_MODE_MASTER;
+  hspi1.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi1.Init.NSS = SPI_NSS_SOFT;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
+  hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
+  hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  hspi1.Init.CRCPolynomial = 10;
+  if (HAL_SPI_Init(&hspi1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN SPI1_Init 2 */
+
+  /* USER CODE END SPI1_Init 2 */
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -241,13 +360,13 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1|SD_CS_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : PA1 */
-  GPIO_InitStruct.Pin = GPIO_PIN_1;
+  /*Configure GPIO pins : PA1 SD_CS_Pin */
+  GPIO_InitStruct.Pin = GPIO_PIN_1|SD_CS_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
