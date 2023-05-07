@@ -111,7 +111,8 @@ void clear_buffer (void)
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-
+	FIL file;
+	FRESULT res;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -140,6 +141,11 @@ int main(void)
 
   HAL_Delay (500);
 
+  // Initialize the SD card
+  if (disk_initialize(0) != RES_OK) {
+	  while(1);
+  }
+
   fresult = f_mount(&fs, "/", 1);
   if (fresult != FR_OK) {
 	  while(1);
@@ -164,22 +170,39 @@ int main(void)
 
   	/************* The following operation is using PUTS and GETS *********************/
 
-  	/* Open file to write/ create a file if it doesn't exist */
-      fresult = f_open(&fil, "FILE003.TXT", FA_OPEN_EXISTING | FA_CREATE_ALWAYS | FA_WRITE |FA_READ);
-      clear_buffer();
-
-  	/* Writing text */
-      fresult = f_puts("This data is from the FILE1.txt.", &fil);
-
-  	/* Close file */
-  	fresult = f_close(&fil);
-
-  	if (fresult != FR_OK){
+  // Open a file for writing
+  if (f_open(&file, "test.txt", FA_CREATE_ALWAYS | FA_WRITE) != FR_OK) {
       while(1);
-    }
-  	else {
-  		/*All OK*/
-  	}
+  }
+
+// Write data to the file
+  char data[] = "Hello, world!";
+  UINT bytes_written;
+  if (f_write(&file, data, sizeof(data), &bytes_written) != FR_OK) {
+	  while(1);
+  }
+
+  // Close the file
+  f_close(&file);
+
+  // Open the file for reading
+  if (f_open(&file, "test.txt", FA_READ) != FR_OK) {
+	  // handle error
+  }
+
+  // Read data from the file
+  char buffer[32];
+  UINT bytes_read;
+  if (f_read(&file, buffer, sizeof(buffer), &bytes_read) != FR_OK) {
+          while(1);
+	  }
+
+  // Close the file
+  f_close(&file);
+
+  // Unmount the SD card
+  f_mount(NULL, "", 0);
+
 
   /* Sets pins for the Load Cell */
   hx711_init(&loadcell, GPIOB, GPIO_PIN_0, GPIOB, GPIO_PIN_1);
